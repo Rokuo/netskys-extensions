@@ -33,7 +33,7 @@ import {
 const MD_DOMAIN = 'https://demonicscans.org'
 
 export const MangaDemonInfo: SourceInfo = {
-    version: '1.1.3',
+    version: '1.1.4',
     name: 'MangaDemon',
     icon: 'icon.png',
     author: 'Netsky',

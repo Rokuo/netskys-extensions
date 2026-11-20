@@ -34,7 +34,7 @@ import {
 const MK_DOMAIN = 'https://mangakatana.com'
 
 export const MangaKatanaInfo: SourceInfo = {
-    version: '3.0.3',
+    version: '3.0.4',
     name: 'MangaKatana',
     icon: 'icon.png',
     author: 'Netsky',
@@ -178,6 +178,17 @@ export class MangaKatana implements SearchResultsProviding, MangaProviding, Chap
         return App.createPagedResults({
             results: manga,
             metadata
+        })
+    }
+
+    async getCloudflareBypassRequestAsync(): Promise<Request> {
+        return App.createRequest({
+            url: MK_DOMAIN,
+            method: 'GET',
+            headers: {
+                'referer': `${MK_DOMAIN}/`,
+                'user-agent': await this.requestManager.getDefaultUserAgent()
+            }
         })
     }
 }

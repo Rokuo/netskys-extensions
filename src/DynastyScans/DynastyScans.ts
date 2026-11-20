@@ -32,7 +32,7 @@ import {
 const DS_DOMAIN = 'https://dynasty-scans.com'
 
 export const DynastyScansInfo: SourceInfo = {
-    version: '2.0.1',
+    version: '2.0.2',
     name: 'Dynasty Scans',
     icon: 'icon.png',
     author: 'Netsky',
@@ -529,5 +529,16 @@ export class DynastyScans implements SearchResultsProviding, MangaProviding, Cha
         }
 
         return cover
+    }
+
+    async getCloudflareBypassRequestAsync(): Promise<Request> {
+        return App.createRequest({
+            url: DS_DOMAIN,
+            method: 'GET',
+            headers: {
+                'referer': `${DS_DOMAIN}/`,
+                'user-agent': await this.requestManager.getDefaultUserAgent()
+            }
+        })
     }
 }

@@ -36,7 +36,7 @@ import { URLBuilder } from './MangaHereHelper'
 const MH_DOMAIN = 'https://www.mangahere.cc'
 
 export const MangaHereInfo: SourceInfo = {
-    version: '3.0.5',
+    version: '3.0.6',
     name: 'MangaHere',
     icon: 'icon.png',
     author: 'Netsky',
@@ -187,5 +187,16 @@ export class MangaHere implements SearchResultsProviding, MangaProviding, Chapte
         const response = await this.requestManager.schedule(request, 1)
         const $ = cheerio.load(response.data as string)
         return parseTags($)
+    }
+
+    async getCloudflareBypassRequestAsync(): Promise<Request> {
+        return App.createRequest({
+            url: MH_DOMAIN,
+            method: 'GET',
+            headers: {
+                'referer': `${MH_DOMAIN}/`,
+                'user-agent': await this.requestManager.getDefaultUserAgent()
+            }
+        })
     }
 }

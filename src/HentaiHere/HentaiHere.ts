@@ -35,7 +35,7 @@ import * as cheerio from 'cheerio'
 const HH_DOMAIN = 'https://hentaihere.com'
 
 export const HentaiHereInfo: SourceInfo = {
-    version: '3.0.2',
+    version: '3.0.3',
     name: 'HentaiHere',
     icon: 'icon.png',
     author: 'Netsky',

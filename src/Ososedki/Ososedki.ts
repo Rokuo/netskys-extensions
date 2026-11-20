@@ -33,7 +33,7 @@ import {
 const OS_DOMAIN = 'https://ososedki.com'
 
 export const OsosedkiInfo: SourceInfo = {
-    version: '1.0.3',
+    version: '1.0.4',
     name: 'Ososedki',
     icon: 'icon.png',
     author: 'Netsky',

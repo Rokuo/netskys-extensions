@@ -22,7 +22,11 @@
     "@noble/ciphers": "^2.4.0",
     "@paperback/toolchain": "^0.8.7",
     "@paperback/types": "^0.8.7",
-    "cheerio": "^1.0.0",
+    "cheerio": "1.1.2",
     "html-entities": "^2.5.2"
+  },
+  "overrides": {
+    "cheerio": "1.1.2",
+    "htmlparser2": "10.0.0"
   }
 }

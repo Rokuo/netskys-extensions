@@ -31,7 +31,7 @@ import {
 const RC_DOMAIN = 'https://readallcomics.com'
 
 export const ReadAllComicsInfo: SourceInfo = {
-    version: '1.0.0',
+    version: '1.0.1',
     name: 'ReadAllComics',
     icon: 'icon.png',
     author: 'Netsky',

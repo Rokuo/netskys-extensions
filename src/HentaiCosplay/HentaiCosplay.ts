@@ -34,7 +34,7 @@ import {
 const HC_DOMAIN = 'https://hentai-cosplay-xxx.com'
 
 export const HentaiCosplayInfo: SourceInfo = {
-    version: '1.1.4',
+    version: '1.1.5',
     name: 'HentaiCosplay',
     icon: 'icon.png',
     author: 'Netsky',
