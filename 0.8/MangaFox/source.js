@@ -15334,12 +15334,130 @@ var _Sources = (() => {
 
   // src/MangaFox/MangaFoxParser.ts
   var import_types2 = __toESM(require_lib());
+
+  // src/MangaFox/MangaFoxMobile.ts
+  var fixUrl = (url2) => {
+    if (!url2) return "";
+    url2 = url2.trim();
+    if (url2.startsWith("//")) return `https:${url2}`;
+    if (url2.startsWith("http://")) return `https://${url2.substring(7)}`;
+    return url2;
+  };
+  var escapeRegex2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  var cleanText = (s) => (s ?? "").replace(/\s+/g, " ").trim();
+  var DATE_REGEX = /(today|yesterday|just now|\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|[a-z]{3,9}\.?\s+\d{1,2},\s*\d{4})\s*$/i;
+  var parseMobileDate = (raw) => {
+    const date = raw.trim();
+    const upper = date.toUpperCase();
+    const now = Date.now();
+    const num = Number((/\d+/.exec(date) ?? ["1"])[0]);
+    if (upper.includes("TODAY") || upper.includes("JUST NOW")) return new Date(now);
+    if (upper.includes("YESTERDAY")) return new Date(now - 864e5);
+    if (upper.includes("AGO")) {
+      if (upper.includes("SECOND")) return new Date(now - num * 1e3);
+      if (upper.includes("MINUTE")) return new Date(now - num * 6e4);
+      if (upper.includes("HOUR")) return new Date(now - num * 36e5);
+      if (upper.includes("DAY")) return new Date(now - num * 864e5);
+      if (upper.includes("WEEK")) return new Date(now - num * 6048e5);
+      if (upper.includes("MONTH")) return new Date(now - num * 2592e6);
+      if (upper.includes("YEAR")) return new Date(now - num * 31556952e3);
+    }
+    const parsed = new Date(date);
+    return isNaN(parsed.getTime()) ? void 0 : parsed;
+  };
+  var findDescription = ($3) => {
+    for (const selector of ['[class*="summary"]', '[id*="summary"]', '[class*="intro"]', '[class*="desc"]']) {
+      const text3 = cleanText($3(selector).first().text()).replace(/^summary\s*:?\s*/i, "");
+      if (text3.length > 40) return text3;
+    }
+    const heading = $3("h1, h2, h3, h4, h5, p, div, span").filter((_, el) => /^summary\s*:?$/i.test(cleanText($3(el).text()))).first();
+    if (heading.length) {
+      const next2 = cleanText(heading.next().text());
+      if (next2.length > 20) return next2;
+      const parentNext = cleanText(heading.parent().next().text());
+      if (parentNext.length > 20) return parentNext;
+    }
+    return cleanText($3('meta[name="description"]').attr("content"));
+  };
+  var parseMobileMangaDetails = ($3, mangaId2, options) => {
+    const cover = $3('img[src*="/store/manga/"]').first();
+    const image = fixUrl(cover.attr("src"));
+    const titleFromMeta = cleanText($3('meta[property="og:title"]').attr("content")).split(/\s[-|]\s/)[0];
+    const titleFromTag = cleanText($3("title").first().text()).split(/\s[-|]\s/)[0];
+    const title = cleanText(cover.attr("alt")) || titleFromMeta || titleFromTag || mangaId2.replace(/_/g, " ");
+    const authors = Array.from(new Set($3(options.authorSelector).toArray().map((a) => cleanText($3(a).text())).filter((x) => x)));
+    const author = authors.join(", ");
+    const arrayTags = [];
+    for (const tag of $3(options.genreSelector).toArray()) {
+      const id = $3(tag).attr("href")?.match(options.genreIdRegex)?.[1];
+      const label = cleanText($3(tag).text());
+      if (!id || !label || arrayTags.some((t) => t.id === id)) continue;
+      arrayTags.push({ id, label });
+    }
+    const tagSections = [App.createTagSection({ id: "0", label: "genres", tags: arrayTags.map((x) => App.createTag(x)) })];
+    const rawStatus = $3("body").text().match(/Status\s*:\s*(Ongoing|Completed|Complete)/i)?.[1] ?? "";
+    const status = rawStatus.toUpperCase().startsWith("COMPLETE") ? "Completed" : "Ongoing";
+    return App.createSourceManga({
+      id: mangaId2,
+      mangaInfo: App.createMangaInfo({
+        titles: [title],
+        image,
+        status,
+        author,
+        artist: author,
+        tags: tagSections,
+        desc: findDescription($3)
+      })
+    });
+  };
+  var parseMobileChapters = ($3, mangaId2) => {
+    const chapters = [];
+    const seen = /* @__PURE__ */ new Set();
+    const hrefRegex = new RegExp(`/manga/${escapeRegex2(mangaId2)}/((?:v[^/]+/)?c[^/]+)/`);
+    for (const link of $3('a[href*="/manga/"]').toArray()) {
+      const href = $3(link).attr("href") ?? "";
+      const chapterId2 = href.match(hrefRegex)?.[1];
+      if (!chapterId2 || seen.has(chapterId2)) continue;
+      const text3 = cleanText($3(link).text());
+      if (!/\b(?:ch(?:apter)?|c)\.?\s*\d/i.test(text3)) continue;
+      seen.add(chapterId2);
+      const dateMatch = text3.match(DATE_REGEX);
+      let name = dateMatch ? text3.substring(0, dateMatch.index).trim() : text3;
+      name = name.replace(/\s+new$/i, "").replace(/^C\.\s*/, "Ch. ").trim();
+      const chapNum = Number(chapterId2.match(/c([0-9.]+)/)?.[1] ?? 0);
+      const volNum = Number(chapterId2.match(/v([0-9.]+)/)?.[1] ?? 0);
+      chapters.push(App.createChapter({
+        id: chapterId2,
+        name,
+        langCode: "\u{1F1EC}\u{1F1E7}",
+        chapNum: isNaN(chapNum) ? 0 : chapNum,
+        volume: isNaN(volNum) ? 0 : volNum,
+        time: dateMatch ? parseMobileDate(dateMatch[1] ?? "") : void 0
+      }));
+    }
+    if (chapters.length == 0) {
+      throw new Error(`Couldn't find any chapters for mangaId: ${mangaId2}!`);
+    }
+    return chapters;
+  };
+  var parseMobileChapterPages = ($3) => {
+    const pages2 = [];
+    for (const img of $3("#viewer img").toArray()) {
+      const src = $3(img).attr("data-original") || $3(img).attr("data-src") || $3(img).attr("src") || "";
+      if (!src || /loading/i.test(src)) continue;
+      const url2 = fixUrl(src);
+      if (!pages2.includes(url2)) pages2.push(url2);
+    }
+    return pages2;
+  };
+
+  // src/MangaFox/MangaFoxParser.ts
   var parseMangaDetails = ($3, mangaId2) => {
     const section = $3(".detail-info");
     const title = $3("span.detail-info-right-title-font", section).text().trim();
     const rating = $3("span.item-score", section).text().trim().replace(",", ".");
     const author = $3("p.detail-info-right-say a", section).text().trim();
-    const image = $3(".detail-info-cover-img", $3(".detail-info-cover")).attr("src") ?? "";
+    const image = fixUrl($3(".detail-info-cover-img", $3(".detail-info-cover")).attr("src"));
     const description = $3("p.fullcontent").text().trim();
     const arrayTags = [];
     for (const tag of $3("a", ".detail-info-right-tag-list").toArray()) {
@@ -15510,7 +15628,7 @@ var _Sources = (() => {
       const mangaArray = [];
       for (const manga of $3("li", section.selector).toArray()) {
         const id = $3("a", manga).attr("href")?.split("/manga/")[1]?.replace(/\//g, "");
-        const image = $3("img", manga).first().attr("src") ?? "";
+        const image = fixUrl($3("img", manga).first().attr("src"));
         const title = $3("a", manga).first().attr("title")?.trim() ?? "";
         const subtitle = $3("p.manga-list-1-item-subtitle", manga).text().trim();
         if (!id || !title || collectedIds.includes(id)) continue;
@@ -15534,7 +15652,7 @@ var _Sources = (() => {
     const latestManga = [];
     for (const manga of $3("li", "div.manga-list-4 ").toArray()) {
       const id = $3("a", manga).attr("href")?.split("/manga/")[1]?.replace(/\//g, "");
-      const image = $3("img", manga).first().attr("src") ?? "";
+      const image = fixUrl($3("img", manga).first().attr("src"));
       const title = $3("a", manga).attr("title")?.trim() ?? "";
       const subtitle = $3("ul.manga-list-4-item-part > li", manga).first().text().trim();
       if (!id || !title || collectedIds.includes(id)) continue;
@@ -15554,7 +15672,7 @@ var _Sources = (() => {
     const collectedIds = [];
     for (const manga of $3("ul.manga-list-4-list > li").toArray()) {
       const id = $3("a", manga).attr("href")?.split("/manga/")[1]?.replace(/\//g, "");
-      const image = $3("img", manga).first().attr("src") ?? "";
+      const image = fixUrl($3("img", manga).first().attr("src"));
       const title = $3("a", manga).attr("title")?.trim() ?? "";
       const subtitle = $3("a", $3("p.manga-list-4-item-tip", manga).get(1)).text();
       if (!id || !title || collectedIds.includes(id)) continue;
@@ -15574,7 +15692,7 @@ var _Sources = (() => {
     if (homepageSectionId === "latest_updates") {
       for (const manga of $3("ul.manga-list-4-list > li").toArray()) {
         const id = $3("a", manga).attr("href")?.split("/manga/")[1]?.replace(/\//g, "");
-        const image = $3("img", manga).first().attr("src") ?? "";
+        const image = fixUrl($3("img", manga).first().attr("src"));
         const title = $3("a", manga).attr("title")?.trim() ?? "";
         const subtitle = $3("ul.manga-list-4-item-part > li", manga).first().text().trim();
         if (!id || !title || collectedIds.includes(id)) continue;
@@ -15590,7 +15708,7 @@ var _Sources = (() => {
     }
     for (const manga of $3("li", $3.html()).toArray()) {
       const id = $3("a", manga).attr("href")?.split("/manga/")[1]?.replace(/\//g, "");
-      const image = $3("img", manga).first().attr("src") ?? "";
+      const image = fixUrl($3("img", manga).first().attr("src"));
       const title = $3("img", manga).first().attr("alt")?.trim() ?? "";
       const subtitle = $3("p.manga-list-1-item-subtitle", manga).text().trim();
       if (!id || !title || collectedIds.includes(id)) continue;
@@ -15691,8 +15809,14 @@ var _Sources = (() => {
 
   // src/MangaFox/MangaFox.ts
   var FF_DOMAIN = "https://fanfox.net";
+  var FF_MOBILE = "https://m.fanfox.net";
+  var FF_MOBILE_OPTIONS = {
+    authorSelector: 'a[href*="/search/author/"]',
+    genreSelector: 'a[href*="/search/cate/"]',
+    genreIdRegex: /\/search\/cate\/([^/?#]+)/
+  };
   var MangaFoxInfo = {
-    version: "3.0.7",
+    version: "3.0.8",
     name: "MangaFox",
     icon: "icon.png",
     author: "Netsky",
@@ -15710,13 +15834,19 @@ var _Sources = (() => {
         requestTimeout: 2e4,
         interceptor: {
           interceptRequest: async (request) => {
+            const headers = request.headers ?? {};
             request.headers = {
-              ...request.headers ?? {},
+              ...headers,
               ...{
-                "referer": `${FF_DOMAIN}/`,
+                // On garde un referer déjà fourni (ex. lecteur mobile)
+                "referer": headers["referer"] ?? headers["Referer"] ?? `${FF_DOMAIN}/`,
                 "user-agent": await this.requestManager.getDefaultUserAgent()
               }
-            }, request.cookies = [
+            };
+            request.cookies = [
+              ...request.cookies ?? [],
+              App.createCookie({ name: "isAdult", value: "1", domain: "m.fanfox.net" }),
+              App.createCookie({ name: "readway", value: "2", domain: "m.fanfox.net" }),
               App.createCookie({ name: "isAdult", value: "1", domain: "fanfox.net" })
             ];
             return request;
@@ -15732,23 +15862,45 @@ var _Sources = (() => {
     }
     async getMangaDetails(mangaId2) {
       const request = App.createRequest({
-        url: `${FF_DOMAIN}/manga/${mangaId2}`,
+        url: `${FF_MOBILE}/manga/${mangaId2}/`,
         method: "GET"
       });
       const response = await this.requestManager.schedule(request, 1);
       const $3 = load(response.data);
-      return parseMangaDetails($3, mangaId2);
+      if ($3(".detail-info").length) return parseMangaDetails($3, mangaId2);
+      return parseMobileMangaDetails($3, mangaId2, FF_MOBILE_OPTIONS);
     }
     async getChapters(mangaId2) {
       const request = App.createRequest({
-        url: `${FF_DOMAIN}/manga/${mangaId2}`,
+        url: `${FF_MOBILE}/manga/${mangaId2}/`,
         method: "GET"
       });
       const response = await this.requestManager.schedule(request, 1);
       const $3 = load(response.data);
-      return parseChapters($3, mangaId2);
+      if ($3("div#chapterlist").length) return parseChapters($3, mangaId2);
+      return parseMobileChapters($3, mangaId2);
     }
     async getChapterDetails(mangaId2, chapterId2) {
+      try {
+        const mobileRequest = App.createRequest({
+          url: `${FF_MOBILE}/roll_manga/${mangaId2}/${chapterId2}/1.html`,
+          method: "GET",
+          headers: {
+            "referer": `${FF_MOBILE}/`
+          }
+        });
+        const mobileResponse = await this.requestManager.schedule(mobileRequest, 1);
+        const pages2 = parseMobileChapterPages(load(mobileResponse.data));
+        if (pages2.length) {
+          return App.createChapterDetails({
+            id: chapterId2,
+            mangaId: mangaId2,
+            pages: pages2
+          });
+        }
+      } catch (error) {
+        console.log(`MangaFox: mobile reader failed, falling back to desktop: ${error}`);
+      }
       const request = App.createRequest({
         url: `${FF_DOMAIN}/manga/${mangaId2}/${chapterId2}/1.html`,
         method: "GET"
