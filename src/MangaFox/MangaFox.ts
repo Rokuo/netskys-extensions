@@ -33,10 +33,24 @@ import {
 
 import { URLBuilder } from './MangaFoxHelper'
 
+import {
+    parseMobileChapterPages,
+    parseMobileChapters,
+    parseMobileMangaDetails
+} from './MangaFoxMobile'
+
 const FF_DOMAIN = 'https://fanfox.net'
+// Le site desktop redirige les fiches manga vers HTTP (bloqué par iOS) : on passe par le mobile
+const FF_MOBILE = 'https://m.fanfox.net'
+
+const FF_MOBILE_OPTIONS = {
+    authorSelector: 'a[href*="/search/author/"]',
+    genreSelector: 'a[href*="/search/cate/"]',
+    genreIdRegex: /\/search\/cate\/([^/?#]+)/
+}
 
 export const MangaFoxInfo: SourceInfo = {
-    version: '3.0.7',
+    version: '3.0.8',
     name: 'MangaFox',
     icon: 'icon.png',
     author: 'Netsky',
@@ -55,13 +69,19 @@ export class MangaFox implements SearchResultsProviding, MangaProviding, Chapter
         requestTimeout: 20000,
         interceptor: {
             interceptRequest: async (request: Request): Promise<Request> => {
+                const headers = request.headers ?? {}
                 request.headers = {
-                    ...(request.headers ?? {}),
+                    ...headers,
                     ...{
-                        'referer': `${FF_DOMAIN}/`,
+                        // On garde un referer déjà fourni (ex. lecteur mobile)
+                        'referer': headers['referer'] ?? headers['Referer'] ?? `${FF_DOMAIN}/`,
                         'user-agent': await this.requestManager.getDefaultUserAgent()
                     }
-                }, request.cookies = [
+                }
+                request.cookies = [
+                    ...(request.cookies ?? []),
+                    App.createCookie({ name: 'isAdult', value: '1', domain: 'm.fanfox.net' }),
+                    App.createCookie({ name: 'readway', value: '2', domain: 'm.fanfox.net' }),
                     App.createCookie({ name: 'isAdult', value: '1', domain: 'fanfox.net' })
                 ]
                 return request
@@ -76,27 +96,53 @@ export class MangaFox implements SearchResultsProviding, MangaProviding, Chapter
 
     async getMangaDetails(mangaId: string): Promise<SourceManga> {
         const request = App.createRequest({
-            url: `${FF_DOMAIN}/manga/${mangaId}`,
+            url: `${FF_MOBILE}/manga/${mangaId}/`,
             method: 'GET'
         })
 
         const response = await this.requestManager.schedule(request, 1)
         const $ = cheerio.load(response.data as string)
-        return parseMangaDetails($, mangaId)
+        // Ancien parseur desktop gardé si jamais le site mobile renvoie la mise en page desktop
+        if ($('.detail-info').length) return parseMangaDetails($, mangaId)
+        return parseMobileMangaDetails($, mangaId, FF_MOBILE_OPTIONS)
     }
 
     async getChapters(mangaId: string): Promise<Chapter[]> {
         const request = App.createRequest({
-            url: `${FF_DOMAIN}/manga/${mangaId}`,
+            url: `${FF_MOBILE}/manga/${mangaId}/`,
             method: 'GET'
         })
 
         const response = await this.requestManager.schedule(request, 1)
         const $ = cheerio.load(response.data as string)
-        return parseChapters($, mangaId)
+        if ($('div#chapterlist').length) return parseChapters($, mangaId)
+        return parseMobileChapters($, mangaId)
     }
 
     async getChapterDetails(mangaId: string, chapterId: string): Promise<ChapterDetails> {
+        // 1) Lecteur mobile en HTTPS, toutes les pages d'un coup (même méthode que Mihon)
+        try {
+            const mobileRequest = App.createRequest({
+                url: `${FF_MOBILE}/roll_manga/${mangaId}/${chapterId}/1.html`,
+                method: 'GET',
+                headers: {
+                    'referer': `${FF_MOBILE}/`
+                }
+            })
+            const mobileResponse = await this.requestManager.schedule(mobileRequest, 1)
+            const pages = parseMobileChapterPages(cheerio.load(mobileResponse.data as string))
+            if (pages.length) {
+                return App.createChapterDetails({
+                    id: chapterId,
+                    mangaId: mangaId,
+                    pages: pages
+                })
+            }
+        } catch (error) {
+            console.log(`MangaFox: mobile reader failed, falling back to desktop: ${error}`)
+        }
+
+        // 2) Repli : ancien lecteur desktop
         const request = App.createRequest({
             url: `${FF_DOMAIN}/manga/${mangaId}/${chapterId}/1.html`,
             method: 'GET'

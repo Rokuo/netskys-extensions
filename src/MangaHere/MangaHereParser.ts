@@ -11,12 +11,14 @@ import {
 
 import { CheerioAPI } from 'cheerio'
 
+import { fixUrl } from './MangaHereMobile'
+
 export const parseMangaDetails = ($: CheerioAPI, mangaId: string): SourceManga => {
     const section = $('.detail-info')
 
     const title = $('span.detail-info-right-title-font', section).text().trim()
     const author = $('p.detail-info-right-say a', section).text().trim()
-    const image = $('.detail-info-cover-img', $('.detail-info-cover')).attr('src') ?? ''
+    const image = fixUrl($('.detail-info-cover-img', $('.detail-info-cover')).attr('src'))
     const description = $('p.fullcontent').text().trim()
 
     const arrayTags: Tag[] = []
@@ -223,7 +225,7 @@ export const parseHomeSections = ($: CheerioAPI, sectionCallback: (section: Home
         const mangaArray: PartialSourceManga[] = []
         for (const manga of $('li', section.selector).toArray()) {
             const id = $('a', manga).attr('href')?.split('/manga/')[1]?.replace(/\//g, '')
-            const image: string = $('img', manga).first().attr('src') ?? ''
+            const image: string = fixUrl($('img', manga).first().attr('src'))
             const title: string = $('img', manga).first().attr('alt')?.trim() ?? ''
             const subtitle: string = $('.manga-list-1-item-subtitle', manga).text().trim()
 
@@ -251,7 +253,7 @@ export const parseHomeSections = ($: CheerioAPI, sectionCallback: (section: Home
     const latestManga: PartialSourceManga[] = []
     for (const manga of $('li', 'div.manga-list-4 ').toArray()) {
         const id = $('a', manga).attr('href')?.split('/manga/')[1]?.replace(/\//g, '')
-        const image: string = $('img', manga).first().attr('src') ?? ''
+        const image: string = fixUrl($('img', manga).first().attr('src'))
         const title: string = $('a', manga).attr('title')?.trim() ?? ''
         const subtitle: string = $('ul.manga-list-4-item-part > li', manga).first().text().trim()
 
@@ -274,7 +276,7 @@ export const parseSearch = ($: CheerioAPI): PartialSourceManga[] => {
 
     for (const manga of $('ul.manga-list-4-list > li').toArray()) {
         const id = $('a', manga).attr('href')?.split('/manga/')[1]?.replace(/\//g, '')
-        const image: string = $('img', manga).first().attr('src') ?? ''
+        const image: string = fixUrl($('img', manga).first().attr('src'))
         const title: string = $('a', manga).attr('title')?.trim() ?? ''
         const subtitle: string = $('a', $('p.manga-list-4-item-tip', manga).get(1)).text()
 
@@ -297,7 +299,7 @@ export const parseViewMore = ($: CheerioAPI, homepageSectionId: string): Partial
     if (homepageSectionId === 'latest_updates') {
         for (const manga of $('ul.manga-list-4-list > li').toArray()) {
             const id = $('a', manga).attr('href')?.split('/manga/')[1]?.replace(/\//g, '')
-            const image: string = $('img', manga).first().attr('src') ?? ''
+            const image: string = fixUrl($('img', manga).first().attr('src'))
             const title: string = $('a', manga).attr('title')?.trim() ?? ''
             const subtitle: string = $('ul.manga-list-4-item-part > li', manga).first().text().trim()
 
@@ -315,7 +317,7 @@ export const parseViewMore = ($: CheerioAPI, homepageSectionId: string): Partial
 
     for (const manga of $('li', $.html()).toArray()) {
         const id = $('a', manga).attr('href')?.split('/manga/')[1]?.replace(/\//g, '')
-        const image: string = $('img', manga).first().attr('src') ?? ''
+        const image: string = fixUrl($('img', manga).first().attr('src'))
         const title: string = $('img', manga).first().attr('alt')?.trim() ?? ''
         const subtitle: string = $('p.manga-list-1-item-subtitle', manga).text().trim()
 

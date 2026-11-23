@@ -31,12 +31,25 @@ import {
     parseViewMore
 } from './MangaHereParser'
 
+import {
+    parseMobileChapters,
+    parseMobileMangaDetails
+} from './MangaHereMobile'
+
 import { URLBuilder } from './MangaHereHelper'
 
 const MH_DOMAIN = 'https://www.mangahere.cc'
+// Le site desktop redirige les fiches manga vers HTTP (bloqué par iOS) : on passe par le mobile
+const MH_MOBILE = 'https://m.mangahere.cc'
+
+const MH_MOBILE_OPTIONS = {
+    authorSelector: 'a[href*="/author/"]',
+    genreSelector: 'a[href*="/directory/"]',
+    genreIdRegex: /\/directory\/([a-z0-9-]+)\/?$/
+}
 
 export const MangaHereInfo: SourceInfo = {
-    version: '3.0.6',
+    version: '3.0.7',
     name: 'MangaHere',
     icon: 'icon.png',
     author: 'Netsky',
@@ -55,13 +68,17 @@ export class MangaHere implements SearchResultsProviding, MangaProviding, Chapte
         requestTimeout: 20000,
         interceptor: {
             interceptRequest: async (request: Request): Promise<Request> => {
+                const headers = request.headers ?? {}
                 request.headers = {
-                    ...(request.headers ?? {}),
+                    ...headers,
                     ...{
-                        'referer': `${MH_DOMAIN}/`,
+                        'referer': headers['referer'] ?? headers['Referer'] ?? `${MH_DOMAIN}/`,
                         'user-agent': await this.requestManager.getDefaultUserAgent()
                     }
-                }, request.cookies = [
+                }
+                request.cookies = [
+                    ...(request.cookies ?? []),
+                    App.createCookie({ name: 'isAdult', value: '1', domain: 'm.mangahere.cc' }),
                     App.createCookie({ name: 'isAdult', value: '1', domain: 'www.mangahere.cc' })
                 ]
                 return request
@@ -76,24 +93,27 @@ export class MangaHere implements SearchResultsProviding, MangaProviding, Chapte
 
     async getMangaDetails(mangaId: string): Promise<SourceManga> {
         const request = App.createRequest({
-            url: `${MH_DOMAIN}/manga/${mangaId}`,
+            url: `${MH_MOBILE}/manga/${mangaId}/`,
             method: 'GET'
         })
 
         const response = await this.requestManager.schedule(request, 1)
         const $ = cheerio.load(response.data as string)
-        return parseMangaDetails($, mangaId)
+        // Ancien parseur desktop gardé si jamais le site mobile renvoie la mise en page desktop
+        if ($('.detail-info').length) return parseMangaDetails($, mangaId)
+        return parseMobileMangaDetails($, mangaId, MH_MOBILE_OPTIONS)
     }
 
     async getChapters(mangaId: string): Promise<Chapter[]> {
         const request = App.createRequest({
-            url: `${MH_DOMAIN}/manga/${mangaId}`,
+            url: `${MH_MOBILE}/manga/${mangaId}/`,
             method: 'GET'
         })
 
         const response = await this.requestManager.schedule(request, 1)
         const $ = cheerio.load(response.data as string)
-        return parseChapters($, mangaId)
+        if ($('div#chapterlist').length) return parseChapters($, mangaId)
+        return parseMobileChapters($, mangaId)
     }
 
     async getChapterDetails(mangaId: string, chapterId: string): Promise<ChapterDetails> {
